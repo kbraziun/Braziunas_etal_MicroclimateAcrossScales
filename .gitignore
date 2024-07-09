@@ -1,0 +1,20 @@
+# files not to be tracked
+*.DS_Store
+*.ini
+.Rproj.user
+*.Rproj
+.Rhistory
+.RData
+.Ruserdata
+
+# folders not to be tracked
+iland/*
+iland/scripts/*
+iland_exe/*
+data/*
+processed_data/*
+
+# exceptions for some files and scripts
+!iland/scripts/
+!iland/scripts/*.R
+!iland/scripts/*.js
