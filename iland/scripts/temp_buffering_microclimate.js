@@ -2,6 +2,22 @@
  * microclimate outputs
  */
 
+function onYearBegin()
+{
+
+	// Static predictors
+	Globals.microclimateGrid('Northness',1).save('output/temp_buffering_microclimate/Northness.asc');
+	Globals.microclimateGrid('TPI',1).save('output/temp_buffering_microclimate/TPI.asc');
+
+	// Dynamic annual predictors
+	Globals.microclimateGrid('LAI',1).save('output/temp_buffering_microclimate/LAI_' + Globals.year + '.asc');
+	Globals.microclimateGrid('ShadeTol',1).save('output/temp_buffering_microclimate/STol_' + Globals.year + '.asc');
+
+	// Min and max temp will come from climate database, but output mean annual temp to ensure correct year
+	Globals.resourceUnitGrid('meanTemp').save('output/temp_buffering_microclimate/MeanTemp_' + Globals.year + '.asc');
+
+}
+
 function onYearEnd()
 {
 

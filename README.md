@@ -3,11 +3,11 @@
 ## purpose
 
 This readme gives an overview of directory structure, files, and steps for recreating
-outputs and analyses associated with the following manuscript (full dataset is included in data deposit, code only is available on Github https://github.com/kbraziun/Braziunas_etal_MicroclimateAcrossScales): 
+outputs and analyses associated with the following manuscript (full dataset is included in data deposit, code only is available on GitHub https://github.com/kbraziun/Braziunas_etal_MicroclimateAcrossScales): 
 
 **Manuscript citation:** Braziunas, K.H., W. Rammer, P. De Frenne, J. Díaz-Calafat, P.-O. Hedwall, C. Senf, D. Thom, F. Zellweger, and R. Seidl. Submitted. Microclimate temperature effects propagate across scales in forest ecosystems. Landscape Ecology.
 
-**Dataset citation:** To be added. Data is not uploaded to Github due to size constraints.
+**Dataset citation:** To be added in GitHub version. Data is not uploaded to GitHub due to size constraints.
 
 ## platforms
 

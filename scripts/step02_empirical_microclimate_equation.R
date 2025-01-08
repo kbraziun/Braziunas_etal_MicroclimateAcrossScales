@@ -67,6 +67,9 @@ corr.abs <- abs(corr.pred)
 corr.abs
 # highly correlated: macro temp and phenology, evergreen/conifer/broadleaved share
 
+# use anova to eval correlation 
+
+
 ### representation across studies
 pred.month %>%
   dplyr::select(-c(plot_id,year:buff_maxT,count)) %>%
@@ -75,6 +78,34 @@ pred.month %>%
   facet_wrap(~name, scales="free") +
   geom_density(aes(x=value, color=data_source,fill=data_source), alpha=0.4) +
   theme_bw()
+
+pred.month %>%
+  dplyr::select(-c(plot_id,year:buff_maxT,count)) %>%
+  pivot_longer(c(macro_minT:tpi)) %>%
+  ggplot() +
+  facet_wrap(~name, scales="free") +
+  geom_boxplot(aes(x=data_source, y=value, fill=data_source)) +
+  theme_bw() 
+
+# summary data
+pred.month %>%
+  group_by(data_source) %>%
+  tally()
+
+pred.summall <- pred.month %>%
+  pivot_longer(c(micro_minT:tpi)) %>%
+  group_by(name) %>%
+  summarise(mean = mean(value), sd = sd(value),
+            min = min(value), max = max(value)) %>%
+  mutate(data_source = "all")
+  
+pred.month %>% 
+  pivot_longer(c(micro_minT:tpi)) %>%
+  group_by(data_source,name) %>%
+  summarise(mean = mean(value), sd = sd(value),
+            min = min(value), max = max(value)) %>%
+  rbind(pred.summall) %>%
+  write.csv("processed_data/microclimate_data_prep/var_mean_sd.csv",row.names=FALSE)
 
 ### pairwise relationships between predictors and responses
 # minT
@@ -139,7 +170,21 @@ car::qqPlot(resid(mod.min))
 plot(mod.min,5) 
 summary(mod.min)
 
+# check for residual trends among data sources
+pred.mod$resid <- resid(mod.min)
+pred.mod$fitted <- predict(mod.min)
+
+ggplot(aes(x=fitted, y=resid), data=pred.mod) +
+  geom_boxplot(aes(color=data_source)) +
+  theme_bw()
+
 # lmm, adding data_source as random effect
+# first check collinearity with fixed effects
+mod.min <- lm(buff_minT ~  northness + tpi + lai + stol + macro_minT + data_source, data=pred.mod)
+vif(mod.min) # GVIF, interpret the squared scaled version similarly to vif
+vif(mod.min)^2
+
+# fit lmm
 mod.min <- lmer(buff_minT ~  northness + tpi + lai + stol + macro_minT + (1|data_source), data=pred.mod,REML=FALSE)
 # mod.min <- lmer(buff_minT ~  northness + tpi + lai + stol + macro_minT + (1|data_source), data=pred.transform,REML=FALSE)
 
@@ -171,6 +216,15 @@ ggplot(data.frame(resid(mod.min)), aes(sample = resid(mod.min))) +
 
 summary(mod.min)
 fixef(mod.min)
+VarCorr(mod.min)
+
+# check for residual trends among data sources
+pred.mod$resid <- resid(mod.min)
+pred.mod$fitted <- predict(mod.min)
+
+ggplot(aes(x=fitted, y=resid), data=pred.mod) +
+  geom_boxplot(aes(color=data_source)) +
+  theme_bw()
 
 ### max buffer
 # simple lm
@@ -188,7 +242,21 @@ car::qqPlot(resid(mod.max))
 plot(mod.max,5) 
 summary(mod.max)
 
+# check for residual trends among data sources
+pred.mod$resid <- resid(mod.max)
+pred.mod$fitted <- predict(mod.max)
+
+ggplot(aes(x=fitted, y=resid), data=pred.mod) +
+  geom_boxplot(aes(color=data_source)) +
+  theme_bw()
+
 # lmm, adding data_source as random effect
+# first check collinearity with fixed effects
+mod.max <- lm(buff_minT ~  northness + tpi + lai + stol + macro_maxT + data_source, data=pred.mod)
+vif(mod.max) # GVIF, interpret the squared scaled version similarly to vif
+vif(mod.max)^2
+
+# fit lmm
 mod.max <- lmer(buff_maxT ~  northness + tpi + lai + stol + macro_maxT + (1|data_source), data=pred.mod,REML=FALSE)
 # mod.max <- lmer(buff_maxT ~  northness + tpi + lai + stol + macro_maxT + (1|data_source), data=pred.transform,REML=FALSE)
 
@@ -220,6 +288,15 @@ ggplot(data.frame(resid(mod.max)), aes(sample = resid(mod.max))) +
 
 summary(mod.max)
 fixef(mod.max)
+VarCorr(mod.max)
+
+# check for residual trends among data sources
+pred.mod$resid <- resid(mod.max)
+pred.mod$fitted <- predict(mod.max)
+
+ggplot(aes(x=fitted, y=resid), data=pred.mod) +
+  geom_boxplot(aes(color=data_source)) +
+  theme_bw()
 
 ###
 # 4. final models, model fit and evaluations

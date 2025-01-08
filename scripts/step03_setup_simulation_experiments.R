@@ -27,7 +27,7 @@ library(terra)
 # 1. Identify climate years for summarizing buffering capacity
 ###
 
-### choose 3 years based on low, average, and high mean annual temperature. Export monthly average of daily temperature buffering capacity for these three years from iLand for use in summarizing buffering across the landscape, by forest type, by season under historical climate
+### choose 3 years based on low, average, and high mean annual temperature. Export average daily temperature buffering capacity for these three years from iLand for use in summarizing buffering across the landscape, by forest type, by season under historical climate
 
 # load iland climate inputs
 conn <-  DBI::dbConnect(RSQLite::SQLite(),
@@ -44,22 +44,24 @@ for(i in 1:length(dbListTables(conn))) {
   # read and summarize annual climate
   clim.in <- tbl(conn, table.in) %>%
     mutate(table_name = table.in) %>%
-    mutate(mean_temp = (min_temp + max_temp)/2) %>%
+    mutate(mean_temp = (min_temp + max_temp)/2,
+           days = 1) %>%
     group_by(year,month,table_name) %>%
-    summarise(across(c(min_temp,max_temp,mean_temp),mean)) %>%
+    summarise(across(c(min_temp,max_temp,mean_temp),mean), days=sum(days)) %>%
     collect()
   
   clim.out <- rbind(clim.out,clim.in)
-}
+
+  }
 
 dbDisconnect(conn) # close the connection
 
 write.csv(clim.out, "processed_data/iland_simulation_prep/climate_table_monthly.csv",row.names=FALSE)
 
-# summarize by year
+# summarize by year, but calc daily averages (weighted average across months)
 clim.yr <- clim.out %>%
   group_by(year) %>%
-  summarise(across(c(min_temp,max_temp,mean_temp), mean))
+  summarise(across(c(min_temp,max_temp,mean_temp), ~weighted.mean(.,days)))
 
 clim.yr %>%
   slice_max(mean_temp) # 1994
@@ -70,6 +72,7 @@ clim.yr %>%
 clim.yr %>%
   arrange(mean_temp) %>%
   slice(15) # 1988
+# note this value is 5.7 C when restricted to only forested area
 
 ###
 # 2. Set up main simulation experiment

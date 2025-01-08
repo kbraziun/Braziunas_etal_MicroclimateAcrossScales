@@ -9,6 +9,7 @@ library(tidyverse)
 library(terra)
 library(ggpubr)
 library(plotrix) # std.error
+library(RSQLite)
 
 ### selected sessionInfo()
 # R version 4.3.2 (2023-10-31 ucrt)
@@ -19,12 +20,12 @@ library(plotrix) # std.error
 #   [1] stats     graphics  grDevices utils     datasets  methods   base     
 # 
 # other attached packages:
-#   [1] plotrix_3.8-4   ggpubr_0.6.0    terra_1.7-55    lubridate_1.9.3 forcats_1.0.0  
-# [6] stringr_1.5.1   dplyr_1.1.4     purrr_1.0.2     readr_2.1.4     tidyr_1.3.0    
-# [11] tibble_3.2.1    ggplot2_3.4.4   tidyverse_2.0.0
+#   [1] RSQLite_2.3.3   plotrix_3.8-4   ggpubr_0.6.0    terra_1.7-55    lubridate_1.9.3
+# [6] forcats_1.0.0   stringr_1.5.1   dplyr_1.1.4     purrr_1.0.2     readr_2.1.4    
+# [11] tidyr_1.3.0     tibble_3.2.1    ggplot2_3.4.4   tidyverse_2.0.0
 
 ###
-# 1. characterize temperature buffering across landscape, by forest type
+# 1. characterize temperature buffering and drivers across landscape, by forest type
 ###
 
 ### load dem and predictors
@@ -32,49 +33,66 @@ dem.in <- rast("iland/gis/dem10_eu_copernicus.asc")
 crs(dem.in) <- "epsg:31468"
 names(dem.in) <- "Elev_m"
 
-preddem.in <- c(rast("iland/gis/TPI.asc"),
-                rast("iland/gis/Northness.asc"))
-crs(preddem.in) <- "epsg:31468"
+pred.in <- c(rast("iland/output/temp_buffering_microclimate/TPI.asc"),
+             rast("iland/output/temp_buffering_microclimate/Northness.asc"),
+             rast("iland/output/temp_buffering_microclimate/LAI_1.asc"),
+             rast("iland/output/temp_buffering_microclimate/STol_1.asc"))
+crs(pred.in) <- "epsg:31468"
 
 # load standgrid
 standid.in <- rast("processed_data/iland_simulation_prep/stand_id_raster.tif")
 crs(standid.in) <- "epsg:31468"
 
-dem.df <- c(crop(dem.in,standid.in),crop(preddem.in,standid.in), standid.in) %>%
+dem.df <- c(crop(dem.in,standid.in),crop(pred.in,standid.in), standid.in) %>%
   as.data.frame() %>%
   filter(!is.na(lyr.1), lyr.1>0)
 
-### read in 10m buffering data
-buff.10m <- read.csv("iland/output/temp_buffering_microclimate/monthly_buffering_1988_10m.csv") %>%
-  left_join(dem.df, by=c("standid"="lyr.1"))
+### read in climate data for 1988
+clim.in <- read.csv("processed_data/iland_simulation_prep/climate_table_monthly.csv") %>%
+  filter(year==1988)
 
-# seasonal
+# number of days per month
+monthdays <- clim.in %>%
+  dplyr::select(month,days) %>%
+  distinct()
+
+# env data to match up with rid
+env.in <- read.table("iland/gis/environment.txt", header=TRUE) %>%
+  dplyr::select(c(id,model.climate.tableName))
+
+### read in and summarize 10m buffering data
+buff.10m <- read.csv("iland/output/temp_buffering_microclimate/monthly_buffering_1988_10m.csv") 
+
+# seasonal, use weighted mean to account for different number of days per month
 buff10m.seas <- buff.10m %>% 
+  left_join(monthdays, by="month") %>%
   group_by(rid,standid,forest_types2020_iland,forest_type_eng,year,season) %>%
-  summarise(across(c(buff_maxT,buff_minT,buff_meanT),mean))
+  summarise(across(c(buff_maxT,buff_minT,buff_meanT),~weighted.mean(.,days)))
 
-# annual 
+# annual, use weighted mean to account for different number of days per month
 buff10m.ann <- buff.10m %>% 
+  left_join(monthdays, by="month") %>%
   group_by(rid,standid,forest_types2020_iland,forest_type_eng,year) %>%
-  summarise(across(c(buff_maxT,buff_minT,buff_meanT),mean)) %>%
+  summarise(across(c(buff_maxT,buff_minT,buff_meanT),~weighted.mean(.,days))) %>%
   mutate(season="annual")
 
-# mean, se, median by season, full landscape
+# mean, se, median, sd, range by season, full landscape
 buff.landscape <- buff10m.seas %>%
   rbind(buff10m.ann) %>%
   group_by(year,season) %>%
-  summarise(across(c(buff_maxT,buff_minT,buff_meanT),list(median=median,mean=mean,se=std.error)))
+  summarise(across(c(buff_maxT,buff_minT,buff_meanT),list(median=median,mean=mean,se=std.error,sd=sd,min=min,max=max)))
 
-# mean, se, median by forest type and season
+# mean, se, median, sd, range by forest type and season
 buff.forestType <- buff10m.seas %>%
   rbind(buff10m.ann) %>%
   group_by(year,season,forest_type_eng) %>%
-  summarise(across(c(buff_maxT,buff_minT,buff_meanT),list(median=median,mean=mean,se=std.error))) 
+  summarise(across(c(buff_maxT,buff_minT,buff_meanT),list(median=median,mean=mean,se=std.error,sd=sd,min=min,max=max)))
 
 # look at trend over elevational/topographic gradient, summer only, use sample of 5% of values for quicker plotting
 buff.10m %>%
   filter(season=="summer") %>%
   slice_sample(n=43000) %>%
+  left_join(dem.df, by=c("standid"="lyr.1")) %>%
   pivot_longer(c(buff_maxT,buff_meanT,buff_minT)) %>%
   pivot_longer(c(Elev_m,TPI,Northness),names_to="pred",values_to="val2") %>%
   ggplot(aes(x=val2, y=value)) +
@@ -89,6 +107,29 @@ buff.10m %>%
 # write out averages
 write.csv(buff.landscape,"analysis/temp_buffering_microclimate/buffer_landscape.csv",row.names=FALSE)
 write.csv(buff.forestType,"analysis/temp_buffering_microclimate/buffer_forestType.csv",row.names=FALSE)
+
+### also summarize mean annual driver data, macro and microclimate
+clim.ann <- clim.in %>%
+  group_by(table_name) %>%
+  summarise(across(c(min_temp,max_temp,mean_temp),~weighted.mean(.,days))) %>%
+  rename(macro_minT = min_temp,
+         macro_maxT = max_temp,
+         macro_meanT = mean_temp)
+
+drivers.ann <- buff10m.ann %>%
+  left_join(dem.df, by=c("standid"="lyr.1")) %>%
+  left_join(env.in, by=c("rid" = "id")) %>%
+  left_join(clim.ann, by=c("model.climate.tableName" = "table_name")) %>%
+  # calc mean annual microclimate temps
+  mutate(micro_minT = macro_minT + buff_minT,
+         micro_meanT = macro_meanT + buff_meanT,
+         micro_maxT = macro_maxT + buff_maxT) %>%
+  pivot_longer(c(buff_maxT,buff_minT,buff_meanT,TPI,Northness,LAI_1,STol_1,macro_minT:micro_maxT)) %>%
+  group_by(year,season,name) %>%
+  summarise(across(value,list(mean=mean,sd=sd,min=min,max=max)))
+
+# write out
+write.csv(drivers.ann,"analysis/temp_buffering_microclimate/driver_summary.csv",row.names=FALSE)
 
 ### compare with independent data
 # create raster with summer mean temp offset
@@ -539,7 +580,7 @@ land.summary %>%
 ###
   
 ### load pre-processed iland outputs
-sens.in <- list.files(path="processed_data/sensitivity_analysis/", pattern=".csv", full.names=TRUE) %>%
+sens.in <- list.files(path="processed_data/sensitivity_analysis/", full.names=TRUE) %>%
   map(~read_csv(.,col_types=c(output="c"))) %>%
   list_rbind()
 
